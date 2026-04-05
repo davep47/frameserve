@@ -2,6 +2,13 @@
 
 **A digital photo frame… but served over the web.**
 
+Forked from davidhfrankelcodes/frameserve
+Thanks for the hard work.
+
+The only thing I have done is added the ability to load photos recursively and filter out .thumb. and .sized. photos.
+
+
+
 Frameserve turns a folder of photos into a clean, full-screen slideshow you can open in any browser — TVs, tablets, old laptops, wall displays, kiosks, you name it.
 
 No galleries.  
