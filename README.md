@@ -92,6 +92,10 @@ Then run:
 ```bash
 docker compose up -d
 ```
+To recompile:
+```
+docker compose up --build
+```
 
 ---
 
