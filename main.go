@@ -144,10 +144,10 @@ func main() {
 		}
 
 		// Only allow file names (no subdirectories) to keep it simple + safe.
-		if strings.Contains(name, "/") || strings.Contains(name, `\`) {
-			http.NotFound(w, r)
-			return
-		}
+	//	if strings.Contains(name, "/") || strings.Contains(name, `\`) {
+	//		http.NotFound(w, r)
+	//		return
+	//	}
 
 		// Extension allowlist
 		if !isAllowedExt(name) {
@@ -241,41 +241,57 @@ func serveEmbeddedFile(w http.ResponseWriter, r *http.Request, path string, forc
 }
 
 func scanPhotos(dir string) ([]Photo, error) {
-	entries, err := os.ReadDir(dir)
+	var photos []Photo
+	dir, err := filepath.Abs(dir)
 	if err != nil {
 		return nil, err
 	}
 
-	var photos []Photo
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		name := e.Name()
-		if !isAllowedExt(name) {
-			continue
-		}
-
-		fullPath, err := safeJoin(dir, name)
+	err = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
-			continue
+			return nil
+		}
+		if d.IsDir() {
+			return nil
+		}
+		fmt.Println("FOUND:", path)
+		name := d.Name()
+		if !isAllowedExt(strings.ToLower(name)) {
+			return nil
 		}
 
-		fi, err := os.Stat(fullPath)
+		if !isAllowedName(name) {
+ 			return nil
+		}
+
+		fi, err := os.Stat(path)
 		if err != nil || fi.IsDir() {
-			continue
+			return nil
+		}
+
+		relPath, err := filepath.Rel(dir, path)
+		if err != nil {
+			return nil
 		}
 
 		mtime := fi.ModTime().Unix()
-		// Cache-bust param v=mtime so browsers refresh when a file changes.
-		url := fmt.Sprintf("/photos/%s?v=%d", urlPathEscape(name), mtime)
-
+		url := fmt.Sprintf("/photos/%s?v=%d",
+			urlPathEscape(filepath.ToSlash(relPath)),
+			mtime,
+		)
+fmt.Println("Filename:", name)
 		photos = append(photos, Photo{
 			URL:   url,
-			Name:  name,
+			Name:  relPath,
 			Mtime: mtime,
 			Size:  fi.Size(),
 		})
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
 	}
 
 	return photos, nil
@@ -286,7 +302,7 @@ func sortPhotos(photos []Photo, order string) {
 	case "mtime_asc":
 		sort.Slice(photos, func(i, j int) bool { return photos[i].Mtime < photos[j].Mtime })
 	case "name_asc":
-		sort.Slice(photos, func(i, j int) bool { return strings.ToLower(photos[i].Name) < strings.ToLower(photos[i].Name) })
+		sort.Slice(photos, func(i, j int) bool { return strings.ToLower(photos[i].Name) < strings.ToLower(photos[j].Name) })
 	case "name_desc":
 		sort.Slice(photos, func(i, j int) bool { return strings.ToLower(photos[i].Name) > strings.ToLower(photos[j].Name) })
 	case "mtime_desc", "":
@@ -297,23 +313,34 @@ func sortPhotos(photos []Photo, order string) {
 }
 
 func isAllowedExt(name string) bool {
-	ext := strings.ToLower(filepath.Ext(name))
-	switch ext {
-	case ".jpg", ".jpeg", ".png", ".webp", ".gif":
-		return true
-	default:
+        ext := strings.ToLower(filepath.Ext(name))
+        switch ext {
+        case ".jpg", ".jpeg", ".png", ".webp", ".gif":
+                return true
+        default:
+                return false
+        }
+}
+
+func isAllowedName(name string) bool {
+	lower := strings.ToLower(name)
+
+	if strings.Contains(lower, "thumb") || strings.Contains(lower, "sized") {
 		return false
 	}
+
+	return true
 }
+
 
 func safeJoin(baseDir, fileName string) (string, error) {
 	if fileName == "" {
 		return "", errors.New("empty name")
 	}
 	clean := filepath.Clean(fileName)
-	clean = filepath.Base(clean)
-
 	joined := filepath.Join(baseDir, clean)
+
+
 
 	baseAbs, err := filepath.Abs(baseDir)
 	if err != nil {
@@ -328,6 +355,7 @@ func safeJoin(baseDir, fileName string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	if strings.HasPrefix(rel, ".."+string(filepath.Separator)) || rel == ".." {
 		return "", errors.New("path escapes base dir")
 	}
